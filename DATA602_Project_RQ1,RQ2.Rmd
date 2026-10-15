@@ -1,0 +1,724 @@
+---
+title: 'DATA 602 Project: RQ1 and RQ2'
+date: "2026-10-01"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+library(ggplot2)
+library(mosaic)
+library(dplyr)
+```
+
+# DATA 602 Final Project RMD File
+
+## Energy Consumption and Economic Development Across Countries
+
+## Group: Abijeet Dhillon, Noor Fatima, Tam Nguyen
+
+## Research Question 1: Did the change in energy consumption per capita from 2010 to 2021 differ between countries with lower and higher initial levels of economic development?
+
+### Hypothesis
+
+Let us define $\Delta = \text{Energy Use}_{2021} - \text{Energy Use}_{2010}$ and countries will be divided into lower and higher initial economic development groups based on the median 2010 GDP per capita (PPP). This will allow us to use $\mu_{\Delta,Higher}$ to represent the population mean of country-level changes for the higher initial economic development group, and $\mu_{\Delta,Lower}$ to represent the population mean of country-level changes for the lower initial economic development group. The statistical hypothesis for research question two is below.
+
+$$
+\begin{aligned}
+H_{0} : \mu_{\Delta,Higher} = \mu_{\Delta,Lower} \\
+H_{A} : \mu_{\Delta,Higher} \ne \mu_{\Delta,Lower}
+\end{aligned}
+$$
+
+In this investigation, we will use a significance level of $\alpha$ = 0.05.
+
+### Data Pre-processing 
+
+This dataset contains 1704 independence observations and 4 columns, with no missing values.
+
+First, we will start by importing our dataset into a dataframe and performing some minor data pre-processing steps to make our dataframe easier to work with.
+
+```{r}
+# import dataset into data frame
+raw_df = read.csv("df_602.csv")
+
+# Check dimensions
+dim(raw_df)
+
+# Check missing values
+colSums(is.na(raw_df))
+
+# rename columns for ease of use
+raw_df = raw_df %>%
+  rename(
+    country = Country.Name,
+    energy_use = Energy.use..kg.of.oil.equivalent.per.capita.,
+    gdp_capita = GDP.per.capita..PPP..constant.2021.international...
+    )
+
+# create dataframes to hold 2010 and 2021 energy use per country
+energy_2010_df = filter(raw_df, Year == 2010)
+energy_2021_df = filter(raw_df, Year == 2021)
+
+# drop year column
+energy_2010_df = select(energy_2010_df, country, energy_use, gdp_capita)
+energy_2021_df = select(energy_2021_df, country, energy_use, gdp_capita)
+
+# rename gdp columns for year specific
+energy_2010_df = energy_2010_df %>%
+  rename(
+    gdp_capita_2010 = gdp_capita,
+    energy_use_2010 = energy_use
+    )
+energy_2021_df = energy_2021_df %>%
+  rename(
+    gdp_capita_2021 = gdp_capita,
+    energy_use_2021 = energy_use
+    )
+
+# create dataframe for analysis
+research2_df = merge(energy_2021_df, energy_2010_df, by = "country")
+
+# create column which calculates energy_use_2021 - energy_use_2010 and group a country into the higher or lower economic development category based on the median gdp from 2010
+median_gdp_2010 = median(research2_df$gdp_capita_2010)
+research2_df = research2_df %>%
+  mutate(
+    energy_diff = energy_use_2021 - energy_use_2010,
+    group = ifelse(gdp_capita_2010 < median_gdp_2010,"lower", "higher")
+    )
+
+head(research2_df, 4)
+```
+
+### Assess Data & Compute Relevant Sample Statistics
+
+```{r}
+# display the descriptive statistics to summarize changes in two groups
+desc_stats = favstats(~energy_diff|group, data = research2_df)
+desc_stats
+
+observed_diff = desc_stats$mean[1] - desc_stats$mean[2]
+observed_diff
+```
+
+Our sample statistics are below.
+
+$$
+\begin{aligned}
+\bar{X}_{\Delta,Higher} &= -445.8320\\
+\bar{X}_{\Delta,Lower} &= 121.6584\\
+\bar{X}_{\Delta,Higher} - &\bar{X}_{\Delta,Lower} = -567.4904\\
+S_{\Delta,Higher} &= 1115.3003\\
+S_{\Delta,Lower} &= 230.9291\\
+\end{aligned}
+$$
+
+From our computation of these relevant sample statistics, we can see a few interesting points.
+- Countries in the higher initial economic development group have a mean energy difference of -445.8320, meaning that these countries used less energy in 2021 than they did in 2020 on average. They also have a higher standard deviation, meaning that the values vary much more among these countries.
+- Countries in the lower initial economic development group have a mean energy difference of 121.6584, meaning that these countries used more energy in 2021 than they did in 2020 on average. They also have a lower standard deviation, meaning that the values vary much less among these countries.
+
+The observed difference between the higher and lower group is -567.4904 kg of oil equivalent per capita.
+
+```{r}
+# check if all countries belong to only one development group and have only one change value in df
+any(duplicated(research2_df$country))
+```
+
+We have determined that each country belongs to only one development group and only contributes 
+
+```{r}
+# plot normality plot to examine distribution of delta in higher group
+higher_df = filter(research2_df, group == "higher")
+ggplot(higher_df, aes(sample = energy_diff)) + stat_qq(col = "blue") + stat_qq_line(col = "red") + ggtitle("Normal Probability Plot", subtitle = "Higher Initial GDP Group")
+```
+
+```{r}
+# plot normality plot to examine distribution of delta in lower group
+lower_df = filter(research2_df, group == "lower")
+ggplot(lower_df, aes(sample = energy_diff)) + stat_qq(col = "blue") + stat_qq_line(col = "red") + ggtitle("Normal Probability Plot", subtitle = "Lower Initial GDP Group")
+```
+
+```{r}
+# plot normality plot to examine distribution of delta in both groups
+ggplot(research2_df, aes(sample = energy_diff)) + stat_qq(col = "blue") + stat_qq_line(col = "red") + ggtitle("Normal Probability Plot", subtitle = "Difference Between GDP Groups")
+```
+
+From the normal probability plots above, we can infer that the distribution of the energy difference data for both higher and lower initial economic development groups is approximately modeled by the Normal Distribution, since all of the points lie most along the diagonal line.
+
+```{r}
+# create boxplot to identify outliers
+ggplot(research2_df, aes(x = group, y = energy_diff)) + geom_boxplot(col = "black", fill = "blue") + xlab("Initial Economic Development Group") + ylab("Energy Change (2010-2021)") + ggtitle("Boxplot", subtitle = "Energy Use Change by Initial Economic Development Group")
+```
+
+From the boxplot above, we can see that each group has some outliers. To further analyze these outliers, we will compute the upper and lower fences for the outlier determination criteria and then identify which countries are outliers.
+
+```{r}
+q1_higher = desc_stats$Q1[1]
+q1_lower = desc_stats$Q1[2]
+q3_higher = desc_stats$Q3[1]
+q3_lower = desc_stats$Q3[2]
+
+# compute the lower and upper fences for both groups
+lf_higher = q1_higher - (1.5 * (q3_higher - q1_higher))
+uf_higher = q3_higher + (1.5 * (q3_higher - q1_higher))
+lf_lower = q1_lower - (1.5 * (q3_lower - q1_lower))
+uf_lower = q3_lower + (1.5 * (q3_lower - q1_lower))
+
+# identify outliers for each group
+higher_outliers_df = filter(higher_df, energy_diff > uf_higher | energy_diff < lf_higher)
+lower_outliers_df = filter(lower_df, energy_diff > uf_lower | energy_diff < lf_lower)
+
+# select only country and energy diff columns
+higher_outliers_df = select(higher_outliers_df, country, energy_diff)
+lower_outliers_df = select(lower_outliers_df, country, energy_diff)
+
+higher_outliers_df
+lower_outliers_df
+```
+
+We can see that out 4 outliers in the higher group are {Curacao: -7104.499, Kuwait: -2740.052, Luxembourg: -2704.748, Trinidad and Tobago: -3806.902}. In the lower group, we have {Armenia: 455.9001, Bosnia and Herzegovina: 566.7772, China: 723.9996, Georgia: 601.3628, Iran, Islamic Rep.: 717.4335, Mongolia: 504.9392, South Africa: -393.8189, Syrian Arab Republic: -545.4488, Turkmenistan: 1031.5927}.
+
+Given the computations performed in this section, we can see that assume that the distribution of our data in this sample approximately follows the Normal distribution, but recognize that are some extreme outliers.
+
+## Conduct Welch Independent-Samples t-test
+
+```{r}
+energy_diff_t_test = t.test(higher_df$energy_diff, lower_df$energy_diff, alternative = "two.sided", conf.level = 0.95)
+energy_diff_t_test
+```
+
+From the Welch independent-sample $t$-test conducted above, we can see that our test statistic is $t = -4.1984$, with 76 degrees of freedom. The probability expression that will serve as a basis for the P-value computation is below.
+
+$$
+\begin{aligned}
+P-value &= 2 * P(\bar{X}_{\Delta,Higher} - \bar{X}_{\Delta,Lower} \ge -445.8320 - 121.6584) \\
+&= 2 * P(T_{76} \ge -4.1984) \\
+&= 2 * pt(-4.1984, 76) \leftarrow \text{R code} \\
+&= 0.00007228768
+\end{aligned}
+$$
+
+```{r}
+pt(-4.1984, 76) * 2
+```
+
+Our P-value is computed to be 0.00007228768. This P-value means that, if the null hypothesis is true, there is a 0.00007228768 probability that another $n=71$ countries with in the higher initial economic development group and $n=71$ countries with in the lower initial economic development group would produce statistical evidence as strong as, if not stronger, against the null hypothesis than the current data/sample.
+
+Given the small P-value from the $t$-test, one would reject the null hypothesis in favour of the alternative hypothesis. 
+
+## Conduct Permutation Test 
+
+```{r}
+# create variables for permutation test
+n_higher = desc_stats$n[1]
+n_lower = desc_stats$n[2]
+n_overall = n_higher + n_lower
+no_perms = 1999
+mean_higher = numeric(no_perms)
+mean_lower = numeric(no_perms)
+diff_mean = numeric(no_perms)
+
+# conduct permutation test
+for (i in 1:no_perms) {
+  # randomly assign indices
+  idx_higher = sample(1:n_overall, n_higher, replace = FALSE)
+  idx_lower = -idx_higher
+  # assign means to vectors
+  mean_higher[i] = mean(research2_df$energy_diff[idx_higher])
+  mean_lower[i] = mean(research2_df$energy_diff[idx_lower])
+  diff_mean[i] = mean_higher[i] - mean_lower[i]
+}
+
+# assign vectors to data frame
+permutation_df = data.frame(mean_higher, mean_lower, diff_mean)
+```
+
+```{r}
+# create density-scale histogram of permutation test results
+ggplot(permutation_df, aes(x = diff_mean, y = after_stat(density))) + geom_histogram(col ="black", fill = "light blue", bins = 20) + xlab("Mean_{Delta,Higher} - Mean_{Delta,Lower}") + ylab("Density") + ggtitle("Permutation Test Results", subtitle = "2000 Permutations:Mean_{Delta,Higher} - Mean_{Delta,Lower}") + geom_vline(xintercept = observed_diff, col = "red")
+```
+
+Above, we have plotted a density-scale histogram of our permutation distribution, with the observed difference of -567.49 plotted as a line on the x-intercept. 
+
+```{r}
+# compute empirical p-value
+p_value = (sum(permutation_df$diff_mean >= abs(observed_diff)) + 1 + sum(permutation_df$diff_mean <= observed_diff)) / (no_perms + 1)
+p_value
+```
+
+We have computed our empirical P-value to be $p = 0.0005$. This P-value means that, if the null hypothesis is true, there is a 0.0005 probablility that another $n=71$ countries with in the higher initial economic development group and $n=71$ countries with in the lower initial economic development group would produce statistical evidence as strong as, if not stronger, against the null hypothesis than the current data/sample.
+
+Given the small P-value from the permutation test, one would reject the null hypothesis in favour of the alternative hypothesis.
+
+## Comparison of the Two Tests
+
+The $t$-test computed the P-value to be $p_{t\_test} = 0.00007228768$ and the permutation test computed the P-value to be $p_{permutation\_test} = 0.0005$. At a significance level of $\alpha = 0.05$, both our Welch independent-samples $t$-test and permutation test reject the null hypothesis. 
+
+Given that the P-values of both the Welch independent-samples $t$-test and the permutation test are small and less than 0.05, we reject the null hypothesis in favour of the alternative hypothesis. From these data, one can conclude that the population mean of country-level changes for the higher initial economic development group is not equal to the population mean of country-level changes for the lower initial economic development group, or that $\mu_{\Delta,Higher} \ne \mu_{\Delta,Lower}$.
+
+## Confidence Interval for Difference in Mean Changes Between the Two Groups
+
+```{r}
+#compute t. est 95% confidence interval
+t_test_ci = t.test(~energy_diff | group, alternative = "two.sided", data = research2_df, conf.level = 0.95)$conf
+t_test_ci
+```
+
+Based on our computation of the Student's $t$ version of the 95% confidence interval, we can infer with 95% confidence that the difference in mean changes between the higher and lower initial economic development groups is somewhere between -836.7039 and -298.2768.
+
+$$
+-836.7039 \le \mu_{\Delta,Higher} - \mu_{\Delta,Lower} \le -298.2768
+$$
+
+## Conclusion for Research Question 1
+
+From these data, we reject the null at the 5% significance level and we conclude that there is statistically significant evidence that the mean change in energy consumption per capita from 2010 to 2021 differed between countries with lower and higher initial levels of economic development. There are two main takeaways from this question.
+
+- Countries in the higher development group used less energy per person in 2021 when compared to 2010, with an average of $\approx$ 446 kg of oil equivalent per capita less.
+- Countries in the lower development group used more energy per person in 2021 when compared to 2010, with an average of $\approx$ 122 kg of oil equivalent per capita more
+
+The 95% confidence interval of the difference in mean changes between the higher and lower initial economic development groups is somewhere between -836.7039 and -298.2768. Since this interval is entirely negative and does not contain 0, we can infer with 95% confidence that the countries in higher development group had a smaller change in their energy consumption than the countries in the lower development group.
+
+-------------------------------------------------------------------
+
+## Question 1: 2010–2019
+
+### Purpose
+
+The 2010–2021 period includes 2020 and 2021, when the COVID-19 pandemic disrupted energy use in many countries. To check whether our conclusion depends on those years, we repeat the analysis using the change from 2010 to 2019. We keep the **same 2010 GDP groups** (the median 2010 GDP per capita split from above), so only the end year of the change is different. The new country-level change is defined below.
+
+$$
+\Delta_{2019} = \text{Energy Use}_{2019} - \text{Energy Use}_{2010}
+$$
+
+The hypotheses and the significance level are unchanged.
+
+$$
+\begin{aligned}
+H_{0} : \mu_{\Delta_{2019},Higher} = \mu_{\Delta_{2019},Lower} \\
+H_{A} : \mu_{\Delta_{2019},Higher} \ne \mu_{\Delta_{2019},Lower}
+\end{aligned}
+$$
+
+### Data Pre-processing
+
+```{r}
+# create dataframe holding 2019 energy use per country
+energy_2019_df = raw_df %>%
+  filter(Year == 2019) %>%
+  select(country, energy_use_2019 = energy_use)
+
+# start from research2_df so the countries and the 2010 GDP groups are exactly the same as before
+sens_df = research2_df %>%
+  select(country, energy_use_2010, gdp_capita_2010, group) %>%
+  merge(energy_2019_df, by = "country") %>%
+  mutate(energy_diff_2019 = energy_use_2019 - energy_use_2010)
+
+# check that no countries were lost and the group sizes did not change
+nrow(research2_df)
+nrow(sens_df)
+table(research2_df$group)
+table(sens_df$group)
+head(sens_df, 4)
+```
+
+### Assess Data & Compute Relevant Sample Statistics
+
+```{r}
+# descriptive statistics for the 2010-2019 change in each group
+desc_stats_s = favstats(~energy_diff_2019|group, data = sens_df)
+desc_stats_s
+
+# observed difference in means (higher - lower); groups are ordered alphabetically, so row 1 = higher and row 2 = lower
+observed_diff_s = desc_stats_s$mean[1] - desc_stats_s$mean[2]
+observed_diff_s
+```
+
+From the 2010–2019 data, the mean change is -377.2783 for the higher initial development group and 95.9865 for the lower group, so the observed difference (higher - lower) is -473.2648 kg of oil equivalent per capita. The standard deviations are 1020.8267 (higher) and 198.349 (lower).
+
+### Check Assumptions
+
+**Independence:** Each country belongs to only one development group and contributes one change value.
+
+```{r}
+any(duplicated(sens_df$country))
+```
+
+**Normality:**
+
+```{r}
+# normal probability plots of the 2010-2019 change in each group
+ggplot(sens_df, aes(sample = energy_diff_2019)) + stat_qq(col = "blue") + stat_qq_line(col = "red") + facet_wrap(~group) + ggtitle("Normal Probability Plots", subtitle = "2010-2019 Energy Use Change by Initial GDP Group")
+```
+
+```{r}
+# histograms of the 2010-2019 change in each group
+ggplot(sens_df, aes(x = energy_diff_2019)) + geom_histogram(col = "black", fill = "light blue", bins = 15) + facet_wrap(~group) + xlab("Energy Change (2010-2019)") + ylab("Frequency") + ggtitle("Histograms", subtitle = "2010-2019 Energy Use Change by Initial GDP Group")
+```
+
+**Outliers:**
+
+```{r}
+# boxplot to identify outliers
+ggplot(sens_df, aes(x = group, y = energy_diff_2019)) + geom_boxplot(col = "black", fill = "blue") + xlab("Initial Economic Development Group") + ylab("Energy Change (2010-2019)") + ggtitle("Boxplot", subtitle = "2010-2019 Energy Use Change by Initial Economic Development Group")
+```
+
+```{r}
+# compute the lower and upper fences for both groups
+higher_s_df = filter(sens_df, group == "higher")
+lower_s_df = filter(sens_df, group == "lower")
+
+lf_higher_s = desc_stats_s$Q1[1] - 1.5 * (desc_stats_s$Q3[1] - desc_stats_s$Q1[1])
+uf_higher_s = desc_stats_s$Q3[1] + 1.5 * (desc_stats_s$Q3[1] - desc_stats_s$Q1[1])
+lf_lower_s = desc_stats_s$Q1[2] - 1.5 * (desc_stats_s$Q3[2] - desc_stats_s$Q1[2])
+uf_lower_s = desc_stats_s$Q3[2] + 1.5 * (desc_stats_s$Q3[2] - desc_stats_s$Q1[2])
+
+# identify outliers in each group
+higher_outliers_s = select(filter(higher_s_df, energy_diff_2019 > uf_higher_s | energy_diff_2019 < lf_higher_s), country, energy_diff_2019)
+lower_outliers_s = select(filter(lower_s_df, energy_diff_2019 > uf_lower_s | energy_diff_2019 < lf_lower_s), country, energy_diff_2019)
+
+higher_outliers_s
+lower_outliers_s
+```
+
+The boxplots show outliers in both groups. In the higher group the outliers are Curaçao (-6,819.71), Kuwait (-2,957.94), Luxembourg (-1,958.97) and Trinidad and Tobago (-2,526.01), the same four countries identified in the 2010–2021 analysis. In the lower group the outliers are Bosnia and Herzegovina (457.23), China (498.17), Georgia (546.57), Iran, Islamic Rep. (538.32), Mongolia (596.04), South Africa (-286.53), Syrian Arab Republic (-463.41), Turkmenistan (-615.41) and Uzbekistan (-307.85). Compared with 2010–2021, Armenia is no longer an outlier and Uzbekistan is newly an outlier, and Turkmenistan's change switches from a large increase (+1,031.59) to a decrease (-615.41), indicating a substantial change in its energy use between 2019 and 2021. Although the distributions are not normal, both groups have a relatively large sample size (about 71 countries each). Therefore, the Central Limit Theorem supports using an approximately normal sampling distribution for the difference in sample means. Because the extreme values, particularly Curaçao, can still influence the mean and standard deviation, we also used the permutation test and a bootstrap confidence interval, which do not require normality.
+
+### Welch Independent-Samples t-test
+
+```{r}
+energy_diff_t_test_s = t.test(higher_s_df$energy_diff_2019, lower_s_df$energy_diff_2019, alternative = "two.sided", conf.level = 0.95)
+energy_diff_t_test_s
+```
+
+The Welch $t$-test gives a test statistic of $t = -3.8347$ with $df = 75$ and a $P-value = 0.0002592$ . At $\alpha = 0.05$ we reject the null hypothesis
+```{r}
+# bootstrap 95% confidence interval for the difference in mean changes (2010-2019)
+# each group is resampled separately, with replacement, keeping its own sample size
+set.seed(602)
+no_boots = 4999
+boot_diff = numeric(no_boots)
+
+for (i in 1:no_boots) {
+  boot_higher = sample(higher_s_df$energy_diff_2019, size = nrow(higher_s_df), replace = TRUE)
+  boot_lower = sample(lower_s_df$energy_diff_2019, size = nrow(lower_s_df), replace = TRUE)
+  boot_diff[i] = mean(boot_higher) - mean(boot_lower)
+}
+
+boot_df = data.frame(boot_diff)
+
+# percentile 95% confidence interval
+boot_ci = quantile(boot_diff, c(0.025, 0.975))
+boot_ci
+```
+The bootstrap 95% confidence interval for mu_higher - mu_lower is (-738.29, -267.16) kg of oil equivalent per capita; because it excludes 0, the mean change is significantly smaller in the higher-development group.
+
+```{r}
+# histogram of the bootstrap distribution with the observed difference (red) and the 95% interval (blue)
+ggplot(boot_df, aes(x = boot_diff, y = after_stat(density))) + geom_histogram(col = "black", fill = "light blue", bins = 30) + geom_vline(xintercept = observed_diff_s, col = "red") + geom_vline(xintercept = boot_ci, col = "blue", linetype = "dashed") + xlab("Mean_{Delta,Higher} - Mean_{Delta,Lower} (2010-2019)") + ylab("Density") + ggtitle("Bootstrap Distribution", subtitle = "4999 Resamples: 2010-2019 Change")
+```
+### Permutation Test
+
+```{r}
+# permutation test for the difference in means (2010-2019 change)
+set.seed(602)
+n_higher_s = desc_stats_s$n[1]
+n_overall_s = nrow(sens_df)
+no_perms = 1999
+diff_mean_s = numeric(no_perms)
+
+for (i in 1:no_perms) {
+  idx_higher = sample(1:n_overall_s, n_higher_s, replace = FALSE)
+  diff_mean_s[i] = mean(sens_df$energy_diff_2019[idx_higher]) - mean(sens_df$energy_diff_2019[-idx_higher])
+}
+
+permutation_s_df = data.frame(diff_mean_s)
+```
+
+```{r}
+# density-scale histogram of the permutation distribution with the observed difference
+ggplot(permutation_s_df, aes(x = diff_mean_s, y = after_stat(density))) + geom_histogram(col = "black", fill = "light blue", bins = 20) + xlab("Mean_{Delta,Higher} - Mean_{Delta,Lower} (2010-2019)") + ylab("Density") + ggtitle("Permutation Test Results", subtitle = "1999 Permutations: 2010-2019 Change") + geom_vline(xintercept = observed_diff_s, col = "red")
+```
+
+```{r}
+# two-sided empirical p-value (counts permuted differences at least as extreme as the observed one in absolute value)
+p_value_s = (sum(abs(permutation_s_df$diff_mean_s) >= abs(observed_diff_s)) + 1) / (no_perms + 1)
+p_value_s
+```
+
+The empirical P-value from the permutation test is $p = 0.0005$, so at $\alpha = 0.05$ we **reject`** the null hypothesis.
+
+### 95% Confidence Interval for the Difference in Mean Changes
+
+```{r}
+# Welch 95% confidence interval (higher - lower) for the 2010-2019 change
+t_test_ci_s = energy_diff_t_test_s$conf.int
+t_test_ci_s
+```
+
+We are 95% confident that the difference in mean changes (higher - lower) from 2010 to 2019 is between -719.1063 -227.4233 kg of oil equivalent per capita.
+
+### Comparison with the 2010–2021 Results
+
+```{r}
+# side-by-side comparison of the original (2010-2021) and sensitivity (2010-2019) results
+comparison_df = data.frame(
+  Period = c("2010-2021", "2010-2019"),
+  Mean_Higher = c(desc_stats$mean[1], desc_stats_s$mean[1]),
+  Mean_Lower = c(desc_stats$mean[2], desc_stats_s$mean[2]),
+  Difference = c(observed_diff, observed_diff_s),
+  Welch_t = c(energy_diff_t_test$statistic, energy_diff_t_test_s$statistic),
+  Welch_p = c(energy_diff_t_test$p.value, energy_diff_t_test_s$p.value),
+  Permutation_p = c(p_value, p_value_s),
+  CI_lower = c(energy_diff_t_test$conf.int[1], t_test_ci_s[1]),
+  CI_upper = c(energy_diff_t_test$conf.int[2], t_test_ci_s[2])
+)
+comparison_df[, -1] = round(comparison_df[, -1], 4)
+comparison_df
+```
+
+Restricting the change to 2010–2019 leads to the same conclusion as the original 2010–2021 analysis. The higher initial development group had a mean decrease in energy use per capita of 377.28 kg of oil equivalent, while the lower group had a mean increase of 95.99, giving a difference of -473.26 (compared with -567.49 for 2010–2021). The Welch t-test (t = -3.83, p $\approx$ 0.0003) and the permutation test (p =  0.0005) both reject the null hypothesis at $\alpha$ = 0.05, and the 95% confidence interval for the difference in means is between -719.1063, -227.4233, which does not contain 0. The difference is somewhat smaller than for the full period, which suggests that 2020–2021 widened the gap between the groups, but the pattern exists without those years. Our conclusion for Research Question 1 is therefore not driven by the pandemic period.
+
+--------------------------------------------------------------------
+## Research Question 2: What is the linear relationship between energy consumption per capita and GDP per capita across countries in 2021, and how much of the variation in GDP per capita is explained by energy consumption per capita?
+
+###Hypothesis
+
+To answer the research question, we will set the independent (explanatory) variable X as energy consumption per capita in 2021, measured in kilograms of oil equivalent per capita, and the dependent (response) variable Y as GDP per capita in 2021, measured using PPP in constant 2021 international dollars.
+
+We will use the following simple linear regression model:
+
+$$
+GDP\ per\ capita_i = \beta_0 + \beta_1(Energy\ Consumption_i) + \epsilon_i
+$$
+
+The statistical hypotheses for Research Question 2 are:
+
+$$
+H_0:\beta_1=0
+$$
+
+$$
+H_A:\beta_1\neq0
+$$
+
+The null hypothesis states that there is no linear relationship between energy consumption per capita and GDP per capita across countries in 2021.
+
+The alternative hypothesis states that there is a linear relationship between energy consumption per capita and GDP per capita across countries in 2021.
+
+In this investigation, we will use a significance level of $\alpha=0.05$.
+
+### Data Pre-processing
+
+Since this research question focuses only on the year 2021, we will create a dataframe for the analysis using the 2021 data prepared previously in Research Question 1. This dataframe contains the country, energy consumption per capita, and GDP per capita for each country in 2021.
+
+```{r}
+# create dataframe for RQ3 analysis using 2021 data prepared previously
+research3_df=energy_2021_df
+head(research3_df)
+```
+
+### Assess Data & Compute Relevant Sample Statistics
+
+From the descriptive statistics below, the 142 countries in our sample had a mean energy consumption per capita of 2,404.13 kg of oil equivalent, with a standard deviation of 2,748.67. The median energy consumption was 1,538.36 kg of oil equivalent per capita, with values ranging from 150.09 to 17,103.38.
+
+The mean GDP per capita was $28,584.44, with a standard deviation of $27,000.76. The median GDP per capita was $18,372.45, with values ranging from $1,402.39 to $136,772.40.
+
+For both variables, the mean is greater than the median, and the maximum is substantially larger than the third quartile.
+
+Two histograms below also show that both energy consumption per capita and GDP per capita are right-skewed. This means that most countries have relatively lower values and only a few countries having very high values.
+
+```{r}
+# Descriptive statistics for energy consumption per capita
+favstats(~research3_df$energy_use_2021)
+
+# Histogram of energy consumption per capita
+ggplot(research3_df, aes(x = energy_use_2021)) +geom_histogram(col = "black", fill = "lightblue", bins = 20) +xlab("Energy Consumption per Capita") +ylab("Frequency") +ggtitle("Distribution of Energy Consumption per Capita",subtitle = "Across Countries in 2021")
+
+# Descriptive statistics for GDP per capita
+favstats(~research3_df$gdp_capita_2021)
+
+# Histogram of GDP per capita
+ggplot(research3_df, aes(x = gdp_capita_2021)) +geom_histogram(col = "black", fill = "lightblue", bins = 20) +xlab("GDP per Capita, PPP (constant 2021 international $)") +ylab("Frequency") +ggtitle("Distribution of GDP per Capita",subtitle = "Across Countries in 2021")
+
+```
+
+### Visualization of the Relationship
+
+The scatterplot shows a positive relationship between energy consumption per capita and GDP per capita, as indicated by the upward slope of the fitted regression line. As energy consumption per capita increases, GDP per capita generally increases. However, there is noticeable variability around the fitted regression line and several potential outliers
+
+```{r}
+ggplot(research3_df,aes(x = energy_use_2021, y = gdp_capita_2021)) +geom_point(col = "blue", size = 2) +
+xlab("Energy Consumption per Capita") +ylab("GDP per Capita, PPP (constant 2021 international $)") +ggtitle("GDP per Capita vs Energy Consumption per Capita") +geom_smooth(method = "lm", col = "red", se = FALSE)
+```
+
+### Building estimated model
+
+The estimated regression model is:
+
+$$
+\widehat{GDP\ per\ capita_i} = 12333.2009 + 6.7597(Energy\ Consumption_i)
+$$
+Interpretation of Intercept and Slope
+$b_0$ (Intercept): The estimated intercept is 12,333.20. When the Energy use per capital is equal to 0, the predicted GDP per capital is 12333.2009 PPP in constant 2021 international dollars. However, since an energy consumption value of 0 is outside the observed range of our data, the intercept does not have a meaningful practical interpretation in this study.
+
+$b_1$ (Slope): The estimated slope is 6.7597. For every 1 kg of oil equivalent increase in Energy use per capital, the predicted GDP per capical increase by 6.7597 PPP in constant 2021 international dollars
+
+```{r}
+model <- lm(gdp_capita_2021 ~ energy_use_2021, data = research3_df) 
+coef(model)
+```
+### Checking condition for linear regression model
+
+To conduct inference using the regression model, the regression conditions should be assessed.
+
+**Condition 1: Normality of residuals**
+
+The QQ plot shows that the residuals do not closely follow the reference line, with substantial deviations in both tails. Therefore, the normality condition for the residuals does not appear to be satisfied.
+
+```{r}
+ggplot(research3_df,aes(sample = rstandard(model))) +  stat_qq() +stat_qq_line()+ggtitle("Normality of residuals ")
+```
+
+**Condition 2: Homoscedasticity**
+
+The residual plot shows a funnel-like pattern, where the spread of the residuals generally increases as the fitted values increase. This suggests that the homoscedasticity condition is not satisfied.
+
+```{r}
+ggplot(research3_df, aes(x = fitted(model), y = residuals(model))) +geom_point() +geom_hline(yintercept = 0, linetype = "dashed") +xlab("Fitted Values") +ylab("Residuals") +ggtitle("Homoscedasticity")
+```
+
+### Log Transformation
+
+Since both energy consumption per capita and GDP per capita are also right-skewed, we will apply a log transformation and fit a new regression model to determine whether the regression conditions improve.
+
+**Visualization  the relationship**
+
+The scatterplot has an upward trend, suggesting a clear positive linear relationship between log energy consumption per capita and log GDP per capita. Compared with the original scale, the observations follow the fitted regression line more closely, and the influence of extremely high values is reduced. This supports the use of the log-transformed model for analyzing the relationship between energy consumption per capita and GDP per capita across countries in 2021.
+
+```{r}
+ggplot(research3_df,aes(x = log(energy_use_2021),y = log(gdp_capita_2021))) +geom_point(col = "blue", size = 2) +geom_smooth(method = "lm", col = "red", se = FALSE) +xlab("Log Energy Consumption per Capita") +ylab("Log GDP per Capita") +ggtitle("Log GDP per Capita vs Log Energy Consumption per Capita",subtitle = "Across Countries in 2021")
+```
+
+**Building estimated regression model**
+
+The estimated log-transformed regression model is:
+
+$$
+\widehat{\log(GDP\ per\ capita_i)}
+= 2.8695 + 0.9479\log(Energy\ Consumption_i)
+$$
+
+**Interpretation of Intercept and Slope**
+
+$b_0$ (Intercept): The estimated intercept is 2.8695. When $\log(Energy\ Consumption)=0$, or equivalently when energy consumption per capita is 1 kg of oil equivalent, the predicted log GDP per capita is 2.8695. However, since an energy consumption value of 1 kg of oil equivalent per capita is outside the observed range of our data, the intercept does not have a meaningful practical interpretation in this study.
+
+$b_1$ (Slope): The estimated slope is 0.9479. Since both GDP per capita and energy consumption per capita are log-transformed, the slope can be interpreted in percentage terms. A 1% increase in energy consumption per capita is associated with approximately a 0.95% increase in GDP per capita, on average.
+
+```{r}
+# Regression model using log-transformed variables
+log_model = lm(log(gdp_capita_2021) ~log(energy_use_2021),data = research3_df)
+
+coef(log_model)
+```
+
+**Checking condition for regression model using log-transformed variables**
+
+To conduct inference using the regression model, the regression conditions should be assessed.
+
+**Condition 1: Normality of residuals**
+
+The residuals lie approximately along the line, with some deviations at the two tails. Compared with the original model, the log-transformed model shows a substantial improvement in normality. Therefore, the normality condition appears to be reasonably satisfied.
+
+```{r}
+ggplot(research3_df, aes(sample = rstandard(log_model))) +stat_qq() +stat_qq_line() +ggtitle("Normality of Residuals - Log Model")
+```
+
+**Condition 2: Homoscedasticity** 
+
+The residual plot does not show a clear funnel-shaped or curved pattern, and the residuals have approximately constant variability across the values of log energy consumption per capita. Therefore, the homoscedasticity condition appears to be reasonably satisfied..
+
+```{r}
+ggplot(research3_df,aes(x = fitted(log_model),y = residuals(log_model))) +geom_point() +geom_hline(yintercept = 0, linetype = "dashed") +xlab("Fitted Values") +ylab("Residuals") +ggtitle("Residuals vs Fitted Values - Log Model")
+
+```
+
+### Hypothesis Test for the Slope
+
+Since the log-transformed model was selected for the final analysis, the hypotheses below test the population slope $beta_1$ for the relationship between log energy consumption per capita and log GDP per capita
+
+$$H_0:\beta_1=0$$
+
+$$H_A:\beta_1\neq0$$
+From the log-transformed regression model, the estimated slope is 0.94792 with a standard error of 0.04166. The test statistic is t=22.75, with a p-value of approximately
+$p = 7.04 \times 10^{-49}$, which is much smaller than the significance level of \(\alpha=0.05\). Therefore, we reject the null hypothesis. There is sufficient statistical evidence that a significant linear relationship exists between log energy consumption per capita and log GDP per capita across countries in 2021.
+
+Since the estimated slope is positive $b_1$=0.9479, the relationship is positive. For every 1% increase in energy consumption per capita, GDP per capita is predicted to increase by approximately 0.95%, on average.
+
+```{r}
+coef(summary(log_model)) 
+```
+
+**Pearson Correlation**
+
+The Pearson correlation coefficient between log energy consumption per capita and log GDP per capita is $r=0.8872$. This indicates a **strong positive linear relationship** between the two log-transformed variables. In general, countries with higher energy consumption per capita tend to have higher GDP per capita.
+
+```{r}
+cor(log(research3_df$energy_use_2021),log(research3_df$gdp_capita_2021))
+```
+
+### Coefficient of Determination 
+
+The coefficient of determination for the log-transformed model is $R^2=0.7871$. This means that approximately **78.71% of the variation in log GDP per capita across countries in 2021 is explained by its linear relationship with log energy consumption per capita**. The remaining 21.29% of the variation is not explained by this model.
+
+```{r}
+rsquared(log_model) 
+```
+
+### 95% confidence interval for regression coefficients
+
+The 95% confidence interval for the population slope $\beta_1$ is [0.8656 1.0303]
+
+From this sample, we can be 95% confident that for every 1% increase in energy consumption per capita, GDP per capita increases by somewhere between approximately 0.87% and 1.03%, on average across countries in 2021. The estimated increase in GDP per capita is approximately 0.95%.
+
+Since the confidence interval does not contain 0, this provides further evidence of a statistically significant positive relationship between energy consumption per capita and GDP per capita.
+
+```{r}
+confint(log_model, level = 0.95)
+```
+
+
+## Conclusion for Research Question 2
+
+### Conclusion
+
+The diagnostic plots for the original regression model showed that the regression conditions were not satisfied. Therefore, we applied a log transformation to both energy consumption per capita and GDP per capita. After the transformation, the residuals followed the QQ reference line more closely and showed a more consistent spread around zero. Therefore, the log-transformed model was used for the final analysis.
+
+The estimated log-transformed regression model is:
+
+$$
+\widehat{\log(GDP\ per\ capita_i)}
+=2.8695+0.9479\log(Energy\ Consumption_i)
+$$
+
+The estimated slope is $b_1=0.9479$. Since both variables are log-transformed, this means that for every 1% increase in energy consumption per capita, GDP per capita is predicted to increase by approximately 0.95%, on average.
+
+The p-value is approximately
+
+$$
+p=7.04\times10^{-49}
+$$
+
+Since the p-value is much smaller than $\alpha=0.05$, we reject the null hypothesis. There is sufficient statistical evidence of a significant linear relationship between log energy consumption per capita and log GDP per capita across countries in 2021.
+
+The 95% confidence interval for the population slope is:
+
+$$
+95\%\ CI_{\beta_1}=(0.8656,\ 1.0303)
+$$
+
+From this sample, we can be 95% confident that the population slope is between 0.8656 and 1.0303. In the context of the log-log model, this means that a 1% increase in energy consumption per capita is associated with approximately betwen 0.87% to 1.03% increase in GDP per capita, on average across countries in 2021.
+
+The coefficient of determination is $R^2=0.7871$. This means that approximately 78.71% of the variation in log GDP per capita across countries in 2021 is explained by its linear relationship with log energy consumption per capita. The remaining 21.29% of the variation is not explained by this model.
+
+Overall, the results show a strong, positive, and statistically significant association between energy consumption per capita and GDP per capita across countries in 2021. Countries with higher energy consumption per capita generally tend to have higher GDP per capita. However, this analysis identifies an association and does not establish a causal relationship between energy consumption and GDP per capita. 
