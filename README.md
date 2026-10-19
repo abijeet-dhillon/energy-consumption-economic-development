@@ -1,6 +1,6 @@
 # Energy Consumption and Economic Development Across Countries
 
-This DATA 602 project studies how per-capita energy use relates to economic development across countries. It combines a country-level comparison of changes over time with a cross-sectional regression analysis for 2021.
+This project studies how per-capita energy use relates to economic development across countries. It combines a country-level comparison of changes over time with a cross-sectional regression analysis for 2021.
 
 ## Research questions and findings
 
